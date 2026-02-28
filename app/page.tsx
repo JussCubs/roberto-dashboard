@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, CartesianGrid } from 'recharts'
 
+const TZ = 'America/New_York'
 const START = 494.69, GOAL = 1_000_000
 const COLORS: Record<string,string> = {
   nowcast_mispricing:'#4488ff', cross_platform_arb:'#00ff88',
@@ -66,7 +67,7 @@ export default function Page(){
 
   const chartData=useMemo(()=>{
     const pts=[{time:'Start',value:START},...snaps.map(p=>({
-      time:new Date(p.captured_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}),
+      time:new Date(p.captured_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:TZ}),
       value:Number(p.total_value_dollars)
     }))]
     return pts
@@ -135,7 +136,7 @@ export default function Page(){
             <span className="font-mono text-xs text-[var(--muted)]">LIVE</span>
           </div>
           <div className="font-mono text-xs text-[var(--muted2)]">
-            {now.toISOString().slice(0,19).replace('T',' ')} UTC
+            {now.toLocaleString('en-US',{timeZone:TZ,hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true})} ET
           </div>
         </div>
       </header>
@@ -278,7 +279,7 @@ export default function Page(){
           {terminalEntries.map((e,i)=>(
             <div key={i} className="mb-4 animate-slide-in" style={{animationDelay:`${i*30}ms`}}>
               <div className="flex items-center gap-2">
-                <span className="text-[#484f58]">{new Date(e.ts).toISOString().slice(0,19).replace('T',' ')}</span>
+                <span className="text-[#484f58]">{new Date(e.ts).toLocaleString('en-US',{timeZone:TZ,month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}</span>
                 <span className="font-bold" style={{color:e.color}}>[{e.type}]</span>
                 {e.ticker&&<span className="text-[var(--amber)]">{e.ticker}</span>}
               </div>
