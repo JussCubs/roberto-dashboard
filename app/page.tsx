@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, CartesianGrid } from 'recharts'
 
-const TZ = 'America/New_York'
+const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone
 const START = 494.69, GOAL = 1_000_000
 const COLORS: Record<string,string> = {
   nowcast_mispricing:'#4488ff', cross_platform_arb:'#00ff88',
@@ -40,7 +40,19 @@ export default function Page(){
     setLoaded(true)
   },[])
 
-  useEffect(()=>{fetch_();const i=setInterval(fetch_,30000);return()=>clearInterval(i)},[fetch_])
+  useEffect(()=>{
+    fetch_()
+    // Realtime subscriptions — instant updates when DB changes
+    const chan = supabase.channel('dashboard-realtime')
+      .on('postgres_changes',{event:'*',schema:'public',table:'trades'},()=>fetch_())
+      .on('postgres_changes',{event:'*',schema:'public',table:'portfolio_snapshots'},()=>fetch_())
+      .on('postgres_changes',{event:'*',schema:'public',table:'decisions'},()=>fetch_())
+      .on('postgres_changes',{event:'*',schema:'public',table:'market_snapshots'},()=>fetch_())
+      .subscribe()
+    // Fallback poll every 60s in case realtime hiccups
+    const i=setInterval(fetch_,60000)
+    return()=>{chan.unsubscribe();clearInterval(i)}
+  },[fetch_])
   useEffect(()=>{const i=setInterval(()=>setNow(new Date()),1000);return()=>clearInterval(i)},[])
 
   const latest=snaps[snaps.length-1]
