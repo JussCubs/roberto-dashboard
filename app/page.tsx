@@ -215,9 +215,9 @@ export default function Page(){
       {/* METRIC CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <Card label="Total Value" value={usd(totalVal)} sub={<><span className="font-mono">{usd(balance)}</span> cash + <span className="font-mono">{usd(marketValue)}</span> positions</>} accent={totalGain>=0?'green':'red'} />
-        <Card label="Cost Basis" value={usd(costBasis)} sub={<>{openTrades.length} positions | {exposurePct.toFixed(1)}% of account</>} />
+        <Card label="Total Gain" value={`${totalGain>=0?'+':''}${usd(totalGain)}`} sub={<>{usd(totalVal)} − {usd(START)} start</>} accent={totalGain>=0?'green':'red'} />
         <Card label="Unrealized P&L" value={`${unrealizedPnl>=0?'+':''}${usd(unrealizedPnl)}`} sub={<>Mkt Value {usd(marketValue)} − Cost {usd(costBasis)}</>} accent={unrealizedPnl>=0?'green':'red'} />
-        <Card label="Net Gain (after fees)" value={`${totalGain>=0?'+':''}${usd(totalGain)}`} sub={<>P&L {unrealizedPnl>=0?'+':''}{usd(unrealizedPnl)} − Fees {usd(totalFees)} = {netPnl>=0?'+':''}{usd(netPnl)}</>} accent={totalGain>=0?'green':'red'} />
+        <Card label="Fees Paid" value={usd(totalFees)} sub={<>{openTrades.length} positions | {exposurePct.toFixed(1)}% exposure</>} />
       </div>
 
       {/* CHARTS */}
