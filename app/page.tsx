@@ -56,16 +56,9 @@ export default function Page(){
   useEffect(()=>{const i=setInterval(()=>setNow(new Date()),1000);return()=>clearInterval(i)},[])
 
   const latest=snaps[snaps.length-1]
-  const totalVal=latest?.total_value_dollars||START
-  const balance=latest?.balance_dollars||totalVal
-  const portfolioVal=latest?.portfolio_value_dollars||0
-  const change=totalVal-START
-  const changePct=((change/START)*100)
-  const goalPct=totalVal/GOAL*100
   const openTrades=trades.filter(t=>t.status==='open')
-  const exposure=latest?.total_exposure_dollars||openTrades.reduce((s,t)=>s+(t.cost_dollars||0),0)
-  const exposurePct=latest?.exposure_pct||(exposure/totalVal*100)
 
+  // Compute P&L per position from live market data
   const withPnl=useMemo(()=>openTrades.map(t=>{
     const s=msnaps[t.ticker]
     const cur=s?(t.side==='no'?(100-s.last_price):s.last_price):t.price_cents
@@ -76,6 +69,16 @@ export default function Page(){
   }),[openTrades,msnaps])
 
   const totalPnl=withPnl.reduce((s,t)=>s+t.pnl,0)
+
+  // Single source of truth: use latest snapshot for cash, compute portfolio live
+  const balance=latest?.balance_dollars||START
+  const exposure=openTrades.reduce((s,t)=>s+(t.cost_dollars||0),0)
+  const portfolioVal=exposure+totalPnl
+  const totalVal=balance+portfolioVal
+  const change=totalVal-START
+  const changePct=((change/START)*100)
+  const goalPct=totalVal/GOAL*100
+  const exposurePct=totalVal>0?(exposure/totalVal*100):0
 
   const chartData=useMemo(()=>{
     const pts=[{time:'Start',value:START},...snaps.map(p=>({
