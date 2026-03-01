@@ -256,37 +256,55 @@ export default function Page(){
         </div>
       </div>
 
-      {/* POSITIONS TABLE */}
+      {/* POSITIONS TABLE — sorted by P&L descending (biggest movers on top) */}
       <div className="gradient-border rounded-xl mb-6 overflow-hidden">
         <div className="p-4 border-b border-[var(--border)]">
-          <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-[0.15em]">Open Positions</h3>
+          <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-[0.15em]">Open Positions <span className="text-[var(--muted2)] ml-2">sorted by P&L</span></h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col style={{width:'200px'}} />{/* Ticker */}
+              <col style={{width:'50px'}} />{/* Side */}
+              <col style={{width:'45px'}} />{/* Qty */}
+              <col style={{width:'60px'}} />{/* Entry */}
+              <col style={{width:'65px'}} />{/* Current */}
+              <col style={{width:'130px'}} />{/* P&L */}
+              <col style={{width:'130px'}} />{/* Edge */}
+              <col />{/* Thesis — takes remaining space */}
+            </colgroup>
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted2)] text-[10px] uppercase tracking-wider">
-                {['Ticker','Side','Qty','Entry','Current','P&L','Edge','Thesis','Age'].map(h=>(
-                  <th key={h} className={`p-3 ${['Qty','Entry','Current','P&L','Age'].includes(h)?'text-right':'text-left'}`}>{h}</th>
-                ))}
+                <th className="p-3 text-left">Ticker</th>
+                <th className="p-3 text-left">Side</th>
+                <th className="p-3 text-right">Qty</th>
+                <th className="p-3 text-right">Entry</th>
+                <th className="p-3 text-right">Now</th>
+                <th className="p-3 text-right">P&L</th>
+                <th className="p-3 text-left">Edge</th>
+                <th className="p-3 text-left">Thesis</th>
               </tr>
             </thead>
             <tbody>
-              {withPnl.map((t,i)=>(
+              {[...withPnl].sort((a,b)=>b.pnl-a.pnl).map((t,i)=>(
                 <tr key={t.trade_id} className="border-b border-[var(--border)] hover:bg-[var(--surface2)] transition-colors animate-fade-up" style={{animationDelay:`${i*60}ms`}}>
-                  <td className="p-3 font-mono font-semibold text-[var(--text)] text-xs">{t.ticker}</td>
+                  <td className="p-3 font-mono font-semibold text-[var(--text)] text-xs">
+                    {t.ticker}
+                    <div className="text-[10px] text-[var(--muted2)] font-normal mt-0.5">{t.age} old</div>
+                  </td>
                   <td className="p-3"><span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${t.side==='yes'?'bg-[rgba(0,255,136,.1)] text-[var(--green)]':'bg-[rgba(255,68,87,.1)] text-[var(--red)]'}`}>{t.side}</span></td>
                   <td className="p-3 text-right font-mono text-xs">{t.count}</td>
                   <td className="p-3 text-right font-mono text-xs text-[var(--muted)]">{t.price_cents}¢</td>
                   <td className="p-3 text-right font-mono text-xs">{t.cur}¢</td>
                   <td className={`p-3 text-right font-mono text-xs font-bold ${t.pnl>=0?'text-[var(--green)]':'text-[var(--red)]'}`}>
-                    {t.pnl>=0?'+':''}{usd(t.pnl)} <span className="text-[var(--muted2)]">({t.pnlPct>=0?'+':''}{t.pnlPct.toFixed(1)}%)</span>
+                    {t.pnl>=0?'+':''}{usd(t.pnl)}<br/>
+                    <span className="text-[var(--muted2)] font-normal">({t.pnlPct>=0?'+':''}{t.pnlPct.toFixed(1)}%)</span>
                   </td>
-                  <td className="p-3"><span className="px-2 py-0.5 rounded-md text-[10px]" style={{background:(COLORS[t.edge_source]||'#555')+'18',color:COLORS[t.edge_source]||'#555'}}>{t.edge_source?.replace(/_/g,' ')}</span></td>
-                  <td className="p-3 text-[var(--muted)] text-[11px] max-w-[200px] truncate hidden lg:table-cell">{t.thesis}</td>
-                  <td className="p-3 text-right font-mono text-xs text-[var(--muted)]">{t.age}</td>
+                  <td className="p-3"><span className="px-2 py-0.5 rounded-md text-[10px] whitespace-nowrap" style={{background:(COLORS[t.edge_source]||'#555')+'18',color:COLORS[t.edge_source]||'#555'}}>{t.edge_source?.replace(/_/g,' ')}</span></td>
+                  <td className="p-3 text-[var(--muted)] text-[11px] leading-relaxed">{t.thesis}</td>
                 </tr>
               ))}
-              {!withPnl.length&&<tr><td colSpan={9} className="p-8 text-center text-[var(--muted)]">Loading positions...</td></tr>}
+              {!withPnl.length&&<tr><td colSpan={8} className="p-8 text-center text-[var(--muted)]">Loading positions...</td></tr>}
             </tbody>
           </table>
         </div>
