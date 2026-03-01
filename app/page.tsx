@@ -27,16 +27,31 @@ export default function Page(){
   const [loaded,setLoaded]=useState(false)
 
   const fetch_=useCallback(async()=>{
-    const [t,p,s,d]=await Promise.all([
+    // Step 1: fetch trades first so we know which tickers to get snapshots for
+    const [t,p,d]=await Promise.all([
       supabase.from('trades').select('*').order('opened_at',{ascending:true}),
       supabase.from('portfolio_snapshots').select('*').order('captured_at',{ascending:true}),
-      supabase.from('market_snapshots').select('ticker,last_price,yes_bid,yes_ask,captured_at').order('captured_at',{ascending:false}).limit(500),
       supabase.from('decisions').select('*').order('decided_at',{ascending:false}).limit(100),
     ])
     if(t.data)setTrades(t.data)
     if(p.data)setSnaps(p.data)
-    if(s.data){const m:Record<string,MSnap>={};for(const x of s.data)if(!m[x.ticker])m[x.ticker]=x;setMsnaps(m)}
     if(d.data)setDecisions(d.data)
+
+    // Step 2: fetch latest snapshot for EACH position ticker specifically
+    if(t.data&&t.data.length>0){
+      const openTickers=Array.from(new Set(t.data.filter(x=>x.status==='open').map(x=>x.ticker)))
+      // Fetch latest snapshot per ticker using in() filter
+      const s=await supabase.from('market_snapshots')
+        .select('ticker,last_price,yes_bid,yes_ask,captured_at')
+        .in('ticker',openTickers)
+        .order('captured_at',{ascending:false})
+        .limit(openTickers.length*5) // get a few per ticker to ensure coverage
+      if(s.data){
+        const m:Record<string,MSnap>={}
+        for(const x of s.data)if(!m[x.ticker])m[x.ticker]=x
+        setMsnaps(m)
+      }
+    }
     setLoaded(true)
   },[])
 
@@ -262,17 +277,7 @@ export default function Page(){
           <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-[0.15em]">Open Positions <span className="text-[var(--muted2)] ml-2">sorted by P&L</span></h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm table-fixed">
-            <colgroup>
-              <col style={{width:'200px'}} />{/* Ticker */}
-              <col style={{width:'50px'}} />{/* Side */}
-              <col style={{width:'45px'}} />{/* Qty */}
-              <col style={{width:'60px'}} />{/* Entry */}
-              <col style={{width:'65px'}} />{/* Current */}
-              <col style={{width:'130px'}} />{/* P&L */}
-              <col style={{width:'130px'}} />{/* Edge */}
-              <col />{/* Thesis — takes remaining space */}
-            </colgroup>
+          <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted2)] text-[10px] uppercase tracking-wider">
                 <th className="p-3 text-left">Ticker</th>
