@@ -71,8 +71,8 @@ export default function Page(){
     const cur=s?(t.side==='no'?(100-s.last_price):s.last_price):t.price_cents
     const pnl=(cur-t.price_cents)*t.count/100
     const pnlPct=(cur-t.price_cents)/t.price_cents*100
-    const days=Math.floor((Date.now()-new Date(t.opened_at).getTime())/864e5)
-    return{...t,cur,pnl,pnlPct,days}
+    const elapsed=Date.now()-new Date(t.opened_at).getTime();const days=Math.floor(elapsed/864e5);const hrs=Math.floor((elapsed%864e5)/36e5);const mins=Math.floor((elapsed%36e5)/6e4);const age=days>0?days+'d '+hrs+'h':hrs>0?hrs+'h '+mins+'m':mins+'m'
+    return{...t,cur,pnl,pnlPct,days,age}
   }),[openTrades,msnaps])
 
   const totalPnl=withPnl.reduce((s,t)=>s+t.pnl,0)
@@ -238,8 +238,8 @@ export default function Page(){
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted2)] text-[10px] uppercase tracking-wider">
-                {['Ticker','Side','Qty','Entry','Current','P&L','Edge','Thesis','Days'].map(h=>(
-                  <th key={h} className={`p-3 ${['Qty','Entry','Current','P&L','Days'].includes(h)?'text-right':'text-left'}`}>{h}</th>
+                {['Ticker','Side','Qty','Entry','Current','P&L','Edge','Thesis','Age'].map(h=>(
+                  <th key={h} className={`p-3 ${['Qty','Entry','Current','P&L','Age'].includes(h)?'text-right':'text-left'}`}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -256,7 +256,7 @@ export default function Page(){
                   </td>
                   <td className="p-3"><span className="px-2 py-0.5 rounded-md text-[10px]" style={{background:(COLORS[t.edge_source]||'#555')+'18',color:COLORS[t.edge_source]||'#555'}}>{t.edge_source?.replace(/_/g,' ')}</span></td>
                   <td className="p-3 text-[var(--muted)] text-[11px] max-w-[200px] truncate hidden lg:table-cell">{t.thesis}</td>
-                  <td className="p-3 text-right font-mono text-xs text-[var(--muted)]">{t.days}d</td>
+                  <td className="p-3 text-right font-mono text-xs text-[var(--muted)]">{t.age}</td>
                 </tr>
               ))}
               {!withPnl.length&&<tr><td colSpan={9} className="p-8 text-center text-[var(--muted)]">Loading positions...</td></tr>}
