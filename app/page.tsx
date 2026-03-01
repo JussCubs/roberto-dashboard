@@ -86,8 +86,12 @@ export default function Page(){
       time:new Date(p.captured_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:TZ}),
       value:Number(p.total_value_dollars)
     }))]
+    // Replace last point with live-computed value so chart matches cards
+    if(pts.length>1){
+      pts[pts.length-1]={...pts[pts.length-1],value:totalVal}
+    }
     return pts
-  },[snaps])
+  },[snaps,totalVal])
 
   const posData=withPnl.map(t=>({
     name:t.ticker.replace(/^KX/,'').replace(/-26APR30-/,' ').replace(/-26-/,' ').replace(/-27-/,' ').slice(0,20),
