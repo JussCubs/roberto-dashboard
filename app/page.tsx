@@ -13,7 +13,7 @@ const COLORS: Record<string,string> = {
 function fmt(n:number,d=2){return n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d})}
 function usd(n:number){return '$'+fmt(n)}
 
-interface Trade{trade_id:string;ticker:string;action:string;side:string;count:number;price_cents:number;cost_dollars:number;status:string;thesis:string;edge_source:string;fair_value_cents:number;estimated_edge_cents:number;confidence:string;opened_at:string}
+interface Trade{trade_id:string;ticker:string;action:string;side:string;count:number;price_cents:number;cost_dollars:number;fees_dollars:number;status:string;thesis:string;edge_source:string;fair_value_cents:number;estimated_edge_cents:number;confidence:string;opened_at:string}
 interface Snap{total_value_dollars:number;balance_dollars:number;portfolio_value_dollars:number;open_positions:number;total_exposure_dollars:number;exposure_pct:number;captured_at:string}
 interface MSnap{ticker:string;last_price:number;yes_bid:number;yes_ask:number;captured_at:string}
 interface Decision{id:number;ticker:string;decision:string;side:string;reasoning:string;edge_source:string;estimated_edge_cents:number;decided_at:string}
@@ -69,6 +69,7 @@ export default function Page(){
   }),[openTrades,msnaps])
 
   const totalPnl=withPnl.reduce((s,t)=>s+t.pnl,0)
+  const totalFees=openTrades.reduce((s,t)=>s+(t.fees_dollars||0),0)
 
   // Single source of truth: use latest snapshot for cash, compute portfolio live
   const balance=latest?.balance_dollars||START
@@ -171,7 +172,7 @@ export default function Page(){
             <span className={`font-mono text-lg font-bold ${change>=0?'text-[var(--green)] glow-green':'text-[var(--red)] glow-red'}`}>
               {change>=0?'+':''}{usd(change)}
             </span>
-            <div className="font-mono text-xs text-[var(--muted)]">{change>=0?'+':''}{changePct.toFixed(2)}% from start</div>
+            <div className="font-mono text-xs text-[var(--muted)]">{change>=0?'+':''}{changePct.toFixed(2)}% | P&L {totalPnl>=0?'+':''}{usd(totalPnl)} — Fees {usd(totalFees)}</div>
           </div>
         </div>
         <div className="relative w-full h-3 bg-[var(--bg)] rounded-full overflow-hidden">
@@ -192,7 +193,7 @@ export default function Page(){
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <Card label="Total Value" value={usd(totalVal)} sub={<><span className="font-mono">{usd(balance)}</span> cash + <span className="font-mono">{usd(portfolioVal)}</span> positions</>} accent={change>=0?'green':'red'} />
         <Card label="Open Positions" value={String(openTrades.length)} sub={<><span className="font-mono">{usd(exposure)}</span> exposure ({exposurePct.toFixed(1)}%)</>} />
-        <Card label="Unrealized P&L" value={`${totalPnl>=0?'+':''}${usd(totalPnl)}`} sub={`Across ${openTrades.length} positions`} accent={totalPnl>=0?'green':'red'} />
+        <Card label="Total Return" value={`${change>=0?'+':''}${usd(change)}`} sub={<>P&L <span className="font-mono">{totalPnl>=0?'+':''}{usd(totalPnl)}</span> — Fees <span className="font-mono">{usd(totalFees)}</span></>} accent={change>=0?'green':'red'} />
         <Card label="Avg Edge" value={`${avgEdge.toFixed(1)}¢`} sub="Estimated per contract" accent="blue" />
       </div>
 
