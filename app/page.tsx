@@ -69,17 +69,16 @@ export default function Page(){
   }),[openTrades,msnaps])
 
   const totalPnl=withPnl.reduce((s,t)=>s+t.pnl,0)
-  const totalFees=openTrades.reduce((s,t)=>s+(t.fees_dollars||0),0)
-
-  // Single source of truth: use latest snapshot for cash, compute portfolio live
+  // Single source of truth: cash from latest snapshot, portfolio computed live from market prices
   const balance=latest?.balance_dollars||START
-  const exposure=openTrades.reduce((s,t)=>s+(t.cost_dollars||0),0)
-  const portfolioVal=exposure+totalPnl
+  const costBasis=openTrades.reduce((s,t)=>s+(t.cost_dollars||0),0)
+  const portfolioVal=withPnl.reduce((s,t)=>s+(t.cur*t.count/100),0)
   const totalVal=balance+portfolioVal
   const change=totalVal-START
   const changePct=((change/START)*100)
   const goalPct=totalVal/GOAL*100
-  const exposurePct=totalVal>0?(exposure/totalVal*100):0
+  const totalFees=openTrades.reduce((s,t)=>s+(t.fees_dollars||0),0)
+  const exposurePct=totalVal>0?(costBasis/totalVal*100):0
 
   const chartData=useMemo(()=>{
     const pts=[{time:'Start',value:START},...snaps.map(p=>({
@@ -195,8 +194,8 @@ export default function Page(){
 
       {/* METRIC CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <Card label="Total Value" value={usd(totalVal)} sub={<><span className="font-mono">{usd(balance)}</span> cash + <span className="font-mono">{usd(portfolioVal)}</span> positions</>} accent={change>=0?'green':'red'} />
-        <Card label="Open Positions" value={String(openTrades.length)} sub={<><span className="font-mono">{usd(exposure)}</span> exposure ({exposurePct.toFixed(1)}%)</>} />
+        <Card label="Total Value" value={usd(totalVal)} sub={<><span className="font-mono">{usd(balance)}</span> cash + <span className="font-mono">{usd(portfolioVal)}</span> positions (cost: {usd(costBasis)})</>} accent={change>=0?'green':'red'} />
+        <Card label="Open Positions" value={String(openTrades.length)} sub={<><span className="font-mono">{usd(costBasis)}</span> exposure ({exposurePct.toFixed(1)}%)</>} />
         <Card label="Position P&L" value={`${totalPnl>=0?'+':''}${usd(totalPnl)}`} sub={<>Fees paid: <span className="font-mono">{usd(totalFees)}</span> | Net: <span className="font-mono">{change>=0?'+':''}{usd(change)}</span></>} accent={totalPnl>=0?'green':'red'} />
         <Card label="Avg Edge" value={`${avgEdge.toFixed(1)}¢`} sub="Estimated per contract" accent="blue" />
       </div>
