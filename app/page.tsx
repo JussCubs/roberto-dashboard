@@ -68,16 +68,36 @@ export default function Page(){
     return{...t,cur,pnl,pnlPct,days,age}
   }),[openTrades,msnaps])
 
-  const totalPnl=withPnl.reduce((s,t)=>s+t.pnl,0)
-  // Single source of truth: cash from latest snapshot, portfolio computed live from market prices
+  // === CALCULATION MODEL (every number derivable) ===
+  //
+  // INPUTS (from DB):
+  //   Balance       = cash in Kalshi account (fees already deducted when trades were placed)
+  //   Cost Basis    = Σ cost_dollars per open trade (entry_price × count / 100)
+  //   Fees Paid     = Σ fees_dollars per open trade
+  //   Current Price = live market price per ticker
+  //
+  // DERIVED:
+  //   Market Value    = Σ (current_price × count / 100)     ← what positions are worth NOW
+  //   Unrealized P&L  = Market Value − Cost Basis           ← position gains, BEFORE fees
+  //   Net P&L         = Unrealized P&L − Fees Paid          ← position gains, AFTER fees
+  //   Total Value     = Balance + Market Value               ← true account worth
+  //   Total Gain      = Total Value − $494.69                ← net gain (after fees)
+  //
+  // VERIFICATION (should hold when no closed trades):
+  //   Total Gain ≈ Net P&L
+  //   (small differences from Kalshi rounding are normal)
+
   const balance=latest?.balance_dollars||START
   const costBasis=openTrades.reduce((s,t)=>s+(t.cost_dollars||0),0)
-  const portfolioVal=withPnl.reduce((s,t)=>s+(t.cur*t.count/100),0)
-  const totalVal=balance+portfolioVal
-  const change=totalVal-START
-  const changePct=((change/START)*100)
-  const goalPct=totalVal/GOAL*100
   const totalFees=openTrades.reduce((s,t)=>s+(t.fees_dollars||0),0)
+  const marketValue=withPnl.reduce((s,t)=>s+(t.cur*t.count/100),0)
+  const unrealizedPnl=marketValue-costBasis              // position gains BEFORE fees
+  const netPnl=unrealizedPnl-totalFees                   // position gains AFTER fees
+  const totalVal=balance+marketValue                     // true account value
+  const totalGain=totalVal-START                         // net gain (after all fees)
+  const totalGainPct=(totalGain/START)*100
+  const totalPnl=unrealizedPnl                           // backward compat
+  const goalPct=totalVal/GOAL*100
   const exposurePct=totalVal>0?(costBasis/totalVal*100):0
 
   const chartData=useMemo(()=>{
@@ -172,10 +192,10 @@ export default function Page(){
             </div>
           </div>
           <div className="text-right">
-            <span className={`font-mono text-lg font-bold ${change>=0?'text-[var(--green)] glow-green':'text-[var(--red)] glow-red'}`}>
-              {change>=0?'+':''}{usd(change)}
+            <span className={`font-mono text-lg font-bold ${totalGain>=0?'text-[var(--green)] glow-green':'text-[var(--red)] glow-red'}`}>
+              {totalGain>=0?'+':''}{usd(totalGain)}
             </span>
-            <div className="font-mono text-xs text-[var(--muted)]">{change>=0?'+':''}{changePct.toFixed(2)}% after fees</div>
+            <div className="font-mono text-xs text-[var(--muted)]">{totalGain>=0?'+':''}{totalGainPct.toFixed(2)}% total gain (after fees)</div>
           </div>
         </div>
         <div className="relative w-full h-3 bg-[var(--bg)] rounded-full overflow-hidden">
@@ -194,10 +214,10 @@ export default function Page(){
 
       {/* METRIC CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <Card label="Total Value" value={usd(totalVal)} sub={<><span className="font-mono">{usd(balance)}</span> cash + <span className="font-mono">{usd(portfolioVal)}</span> positions (cost: {usd(costBasis)})</>} accent={change>=0?'green':'red'} />
-        <Card label="Open Positions" value={String(openTrades.length)} sub={<><span className="font-mono">{usd(costBasis)}</span> exposure ({exposurePct.toFixed(1)}%)</>} />
-        <Card label="Position P&L" value={`${totalPnl>=0?'+':''}${usd(totalPnl)}`} sub={<>Fees paid: <span className="font-mono">{usd(totalFees)}</span> | Net: <span className="font-mono">{change>=0?'+':''}{usd(change)}</span></>} accent={totalPnl>=0?'green':'red'} />
-        <Card label="Avg Edge" value={`${avgEdge.toFixed(1)}¢`} sub="Estimated per contract" accent="blue" />
+        <Card label="Total Value" value={usd(totalVal)} sub={<><span className="font-mono">{usd(balance)}</span> cash + <span className="font-mono">{usd(marketValue)}</span> positions</>} accent={totalGain>=0?'green':'red'} />
+        <Card label="Cost Basis" value={usd(costBasis)} sub={<>{openTrades.length} positions | {exposurePct.toFixed(1)}% of account</>} />
+        <Card label="Unrealized P&L" value={`${unrealizedPnl>=0?'+':''}${usd(unrealizedPnl)}`} sub={<>Mkt Value {usd(marketValue)} − Cost {usd(costBasis)}</>} accent={unrealizedPnl>=0?'green':'red'} />
+        <Card label="Net Gain (after fees)" value={`${totalGain>=0?'+':''}${usd(totalGain)}`} sub={<>P&L {unrealizedPnl>=0?'+':''}{usd(unrealizedPnl)} − Fees {usd(totalFees)} = {netPnl>=0?'+':''}{usd(netPnl)}</>} accent={totalGain>=0?'green':'red'} />
       </div>
 
       {/* CHARTS */}
