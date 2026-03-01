@@ -280,33 +280,32 @@ export default function Page(){
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted2)] text-[10px] uppercase tracking-wider">
-                <th className="p-3 text-left">Ticker</th>
-                <th className="p-3 text-left">Side</th>
-                <th className="p-3 text-right">Qty</th>
-                <th className="p-3 text-right">Entry</th>
-                <th className="p-3 text-right">Now</th>
-                <th className="p-3 text-right">P&L</th>
-                <th className="p-3 text-left">Edge</th>
-                <th className="p-3 text-left">Thesis</th>
+                <th className="p-2 text-left">Ticker</th>
+                <th className="p-2 text-left">Side</th>
+                <th className="p-2 text-right">Qty</th>
+                <th className="p-2 text-right">Entry</th>
+                <th className="p-2 text-right">Now</th>
+                <th className="p-2 text-right">P&L</th>
+                <th className="p-2 text-left">Edge</th>
+                <th className="p-2 text-left">Thesis</th>
               </tr>
             </thead>
             <tbody>
               {[...withPnl].sort((a,b)=>b.pnl-a.pnl).map((t,i)=>(
                 <tr key={t.trade_id} className="border-b border-[var(--border)] hover:bg-[var(--surface2)] transition-colors animate-fade-up" style={{animationDelay:`${i*60}ms`}}>
-                  <td className="p-3 font-mono font-semibold text-[var(--text)] text-xs">
-                    {t.ticker}
-                    <div className="text-[10px] text-[var(--muted2)] font-normal mt-0.5">{t.age} old</div>
+                  <td className="p-2 font-mono font-semibold text-[var(--text)] text-xs whitespace-nowrap">
+                    {t.ticker} <span className="text-[10px] text-[var(--muted2)] font-normal ml-1">{t.age}</span>
                   </td>
                   <td className="p-3"><span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${t.side==='yes'?'bg-[rgba(0,255,136,.1)] text-[var(--green)]':'bg-[rgba(255,68,87,.1)] text-[var(--red)]'}`}>{t.side}</span></td>
-                  <td className="p-3 text-right font-mono text-xs">{t.count}</td>
-                  <td className="p-3 text-right font-mono text-xs text-[var(--muted)]">{t.price_cents}¢</td>
-                  <td className="p-3 text-right font-mono text-xs">{t.cur}¢</td>
+                  <td className="p-2 text-right font-mono text-xs">{t.count}</td>
+                  <td className="p-2 text-right font-mono text-xs text-[var(--muted)]">{t.price_cents}¢</td>
+                  <td className="p-2 text-right font-mono text-xs">{t.cur}¢</td>
                   <td className={`p-3 text-right font-mono text-xs font-bold ${t.pnl>=0?'text-[var(--green)]':'text-[var(--red)]'}`}>
                     {t.pnl>=0?'+':''}{usd(t.pnl)}<br/>
                     <span className="text-[var(--muted2)] font-normal">({t.pnlPct>=0?'+':''}{t.pnlPct.toFixed(1)}%)</span>
                   </td>
                   <td className="p-3"><span className="px-2 py-0.5 rounded-md text-[10px] whitespace-nowrap" style={{background:(COLORS[t.edge_source]||'#555')+'18',color:COLORS[t.edge_source]||'#555'}}>{t.edge_source?.replace(/_/g,' ')}</span></td>
-                  <td className="p-3 text-[var(--muted)] text-[11px] leading-relaxed">{t.thesis}</td>
+                  <td className="p-2 text-[var(--muted)] text-[11px] max-w-[300px]" title={t.thesis}><div className="line-clamp-2">{t.thesis}</div></td>
                 </tr>
               ))}
               {!withPnl.length&&<tr><td colSpan={8} className="p-8 text-center text-[var(--muted)]">Loading positions...</td></tr>}
@@ -366,21 +365,21 @@ export default function Page(){
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted2)] text-[10px] uppercase tracking-wider">
-                <th className="p-3 text-left">Strategy</th>
-                <th className="p-3 text-right">Trades</th>
-                <th className="p-3 text-right">Total Cost</th>
-                <th className="p-3 text-right">Avg Edge (Est)</th>
-                <th className="p-3 text-left">Strength</th>
+                <th className="p-2 text-left">Strategy</th>
+                <th className="p-2 text-right">Trades</th>
+                <th className="p-2 text-right">Total Cost</th>
+                <th className="p-2 text-right">Avg Edge (Est)</th>
+                <th className="p-2 text-left">Strength</th>
               </tr>
             </thead>
             <tbody>
               {Object.entries(edgeGroups).map(([src,d])=>(
                 <tr key={src} className="border-b border-[var(--border)] hover:bg-[var(--surface2)] transition-colors">
                   <td className="p-3"><span className="px-2 py-1 rounded-md text-xs font-medium" style={{background:(COLORS[src]||'#555')+'18',color:COLORS[src]||'#555'}}>{src.replace(/_/g,' ')}</span></td>
-                  <td className="p-3 text-right font-mono">{d.count}</td>
-                  <td className="p-3 text-right font-mono">{usd(d.cost)}</td>
-                  <td className="p-3 text-right font-mono">{(d.edge/d.count).toFixed(1)}¢</td>
-                  <td className="p-3 w-32">
+                  <td className="p-2 text-right font-mono">{d.count}</td>
+                  <td className="p-2 text-right font-mono">{usd(d.cost)}</td>
+                  <td className="p-2 text-right font-mono">{(d.edge/d.count).toFixed(1)}¢</td>
+                  <td className="p-2 w-32">
                     <div className="w-full h-2 bg-[var(--bg)] rounded-full overflow-hidden">
                       <div className="h-full rounded-full transition-all duration-700" style={{width:`${Math.min(100,d.edge/d.count*8)}%`,background:COLORS[src]||'#555'}}></div>
                     </div>
