@@ -244,10 +244,10 @@ export default function Page(){
       {/* METRIC CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
         <Card label="Total Value" value={usd(totalVal)} sub={<><span className="font-mono">{usd(balance)}</span> cash + <span className="font-mono">{usd(marketValue)}</span> positions{beacon?' ✓':' ⚠️'}</>} accent={totalGain>=0?'green':'red'} />
-        <Card label="Total Gain" value={`${totalGain>=0?'+':''}${usd(totalGain)}`} sub={<>{usd(totalVal)} − {usd(START)} start</>} accent={totalGain>=0?'green':'red'} />
-        <Card label="Unrealized P&L" value={`${unrealizedPnl>=0?'+':''}${usd(unrealizedPnl)}`} sub={<>{openTrades.length} open positions</>} accent={unrealizedPnl>=0?'green':'red'} />
-        <Card label="Realized P&L" value={`${realizedPnl>=0?'+':''}${usd(realizedPnl)}`} sub={<>{closedTrades.length} closed trades</>} accent={realizedPnl>=0?'green':'red'} />
-        <Card label="Fees Paid" value={usd(totalFees)} sub={<>{exposurePct.toFixed(1)}% exposure</>} />
+        <Card label="Total Gain" value={`${totalGain>=0?'+':''}${usd(totalGain)}`} sub={<>Since {usd(START)} start (from Kalshi)</>} accent={totalGain>=0?'green':'red'} />
+        <Card label="Unrealized P&L" value={`${unrealizedPnl>=0?'+':''}${usd(unrealizedPnl)}`} sub={<>Σ open rows below ({openTrades.length})</>} accent={unrealizedPnl>=0?'green':'red'} />
+        <Card label="Realized P&L" value={`${realizedPnl>=0?'+':''}${usd(realizedPnl)}`} sub={<>Σ closed rows below ({closedTrades.length})</>} accent={realizedPnl>=0?'green':'red'} />
+        <Card label="Fees Paid" value={usd(totalFees)} sub={<>Tracked trades | {exposurePct.toFixed(1)}% exp</>} />
       </div>
 
       {/* CHARTS */}
@@ -330,6 +330,17 @@ export default function Page(){
                 </tr>
               ))}
               {!allPositions.length&&<tr><td colSpan={9} className="p-8 text-center text-[var(--muted)]">Loading positions...</td></tr>}
+              {allPositions.length>0&&(
+                <tr className="border-t-2 border-[var(--border)] bg-[var(--surface2)]">
+                  <td colSpan={6} className="p-3 text-right font-mono text-xs text-[var(--muted)]">
+                    Table P&L Sum (Unrealized + Realized)
+                  </td>
+                  <td className={`p-3 text-right font-mono text-xs font-bold ${tablePnlSum>=0?'text-[var(--green)]':'text-[var(--red)]'}`}>
+                    {tablePnlSum>=0?'+':''}{usd(tablePnlSum)}
+                  </td>
+                  <td colSpan={2}></td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
