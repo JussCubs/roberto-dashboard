@@ -90,9 +90,9 @@ export default function Page(){
   }),[openTrades,msnaps])
 
   const closedWithPnl=useMemo(()=>closedTrades.map(t=>{
-    const cur=t.exit_price_cents||t.price_cents
-    const pnl=t.pnl_dollars||((cur-t.price_cents)*t.count/100)
-    const pnlPct=t.pnl_pct||((cur-t.price_cents)/t.price_cents*100)
+    const cur=t.exit_price_cents??t.price_cents
+    const pnl=t.pnl_dollars??((cur-t.price_cents)*t.count/100)
+    const pnlPct=t.pnl_pct??((cur-t.price_cents)/t.price_cents*100)
     const openDate=new Date(t.opened_at)
     const closeDate=t.exit_date?new Date(t.exit_date):new Date()
     const heldMs=closeDate.getTime()-openDate.getTime();const days=Math.floor(heldMs/864e5);const hrs=Math.floor((heldMs%864e5)/36e5)
@@ -115,16 +115,19 @@ export default function Page(){
 
   const balance=beacon?.balance ?? latest?.balance_dollars ?? START
   const costBasis=openTrades.reduce((s,t)=>s+(t.cost_dollars||0),0)
-  const totalFees=openTrades.reduce((s,t)=>s+(t.fees_dollars||0),0)
+  const totalFeesOpen=openTrades.reduce((s,t)=>s+(t.fees_dollars||0),0)
+  const totalFeesClosed=closedTrades.reduce((s,t)=>s+(t.fees_dollars||0),0)
+  const totalFees=totalFeesOpen+totalFeesClosed
   const marketValue=withPnl.reduce((s,t)=>s+(t.cur*t.count/100),0)
-  const unrealizedPnl=marketValue-costBasis              // position gains BEFORE fees
-  const netPnl=unrealizedPnl-totalFees                   // position gains AFTER fees
+  const unrealizedPnl=withPnl.reduce((s,t)=>s+t.pnl,0)  // sum of each row's P&L
+  const realizedPnl=closedWithPnl.reduce((s,t)=>s+t.pnl,0) // sum of closed P&L
   const totalVal=balance+marketValue                     // true account value
   const totalGain=totalVal-START                         // net gain (after all fees)
   const totalGainPct=(totalGain/START)*100
   const totalPnl=unrealizedPnl                           // backward compat
   const goalPct=totalVal/GOAL*100
   const exposurePct=totalVal>0?(costBasis/totalVal*100):0
+  const tablePnlSum=unrealizedPnl+realizedPnl            // what the table rows sum to
 
   const chartData=useMemo(()=>{
     const pts=[{time:'Start',value:START},...snaps.map(p=>({
@@ -239,11 +242,12 @@ export default function Page(){
       </div>
 
       {/* METRIC CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <Card label="Total Value" value={usd(totalVal)} sub={<><span className="font-mono">{usd(balance)}</span> cash + <span className="font-mono">{usd(marketValue)}</span> positions{beacon?' ✓':' ⚠️ stale'}</>} accent={totalGain>=0?'green':'red'} />
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+        <Card label="Total Value" value={usd(totalVal)} sub={<><span className="font-mono">{usd(balance)}</span> cash + <span className="font-mono">{usd(marketValue)}</span> positions{beacon?' ✓':' ⚠️'}</>} accent={totalGain>=0?'green':'red'} />
         <Card label="Total Gain" value={`${totalGain>=0?'+':''}${usd(totalGain)}`} sub={<>{usd(totalVal)} − {usd(START)} start</>} accent={totalGain>=0?'green':'red'} />
-        <Card label="Unrealized P&L" value={`${unrealizedPnl>=0?'+':''}${usd(unrealizedPnl)}`} sub={<>Mkt Value {usd(marketValue)} − Cost {usd(costBasis)}</>} accent={unrealizedPnl>=0?'green':'red'} />
-        <Card label="Fees Paid" value={usd(totalFees)} sub={<>{openTrades.length} positions | {exposurePct.toFixed(1)}% exposure</>} />
+        <Card label="Unrealized P&L" value={`${unrealizedPnl>=0?'+':''}${usd(unrealizedPnl)}`} sub={<>{openTrades.length} open positions</>} accent={unrealizedPnl>=0?'green':'red'} />
+        <Card label="Realized P&L" value={`${realizedPnl>=0?'+':''}${usd(realizedPnl)}`} sub={<>{closedTrades.length} closed trades</>} accent={realizedPnl>=0?'green':'red'} />
+        <Card label="Fees Paid" value={usd(totalFees)} sub={<>{exposurePct.toFixed(1)}% exposure</>} />
       </div>
 
       {/* CHARTS */}
