@@ -23,19 +23,23 @@ export default function Page(){
   const [snaps,setSnaps]=useState<Snap[]>([])
   const [msnaps,setMsnaps]=useState<Record<string,MSnap>>({})
   const [decisions,setDecisions]=useState<Decision[]>([])
+  const [beacon,setBeacon]=useState<{balance:number;portfolio_value:number;total_value:number}|null>(null)
   const [now,setNow]=useState(new Date())
   const [loaded,setLoaded]=useState(false)
 
   const fetch_=useCallback(async()=>{
     // Step 1: fetch trades first so we know which tickers to get snapshots for
-    const [t,p,d]=await Promise.all([
+    const [t,p,d,bq]=await Promise.all([
       supabase.from('trades').select('*').order('opened_at',{ascending:true}),
       supabase.from('portfolio_snapshots').select('*').order('captured_at',{ascending:true}),
-      supabase.from('decisions').select('*').order('decided_at',{ascending:false}).limit(100),
+      supabase.from('decisions').select('*').order('decided_at',{ascending:false}).limit(200),
+      supabase.from('decisions').select('*').eq('ticker','__BALANCE__').order('decided_at',{ascending:false}).limit(1),
     ])
     if(t.data)setTrades(t.data)
     if(p.data)setSnaps(p.data)
-    if(d.data)setDecisions(d.data)
+    if(d.data)setDecisions(d.data.filter((x:Decision)=>x.ticker!=='__BALANCE__'))
+    // Balance beacon — direct query for reliability
+    if(bq.data&&bq.data.length>0){try{setBeacon(JSON.parse(bq.data[0].reasoning))}catch{}}
 
     // Step 2: fetch latest snapshot for EACH position ticker specifically
     if(t.data&&t.data.length>0){
@@ -62,6 +66,7 @@ export default function Page(){
       .on('postgres_changes',{event:'*',schema:'public',table:'trades'},()=>fetch_())
       .on('postgres_changes',{event:'*',schema:'public',table:'portfolio_snapshots'},()=>fetch_())
       .on('postgres_changes',{event:'*',schema:'public',table:'decisions'},()=>fetch_())
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'decisions',filter:'ticker=eq.__BALANCE__'},()=>fetch_())
       .on('postgres_changes',{event:'*',schema:'public',table:'market_snapshots'},()=>fetch_())
       .subscribe()
     // Fallback poll every 60s in case realtime hiccups
@@ -83,26 +88,15 @@ export default function Page(){
     return{...t,cur,pnl,pnlPct,days,age}
   }),[openTrades,msnaps])
 
-  // === CALCULATION MODEL (every number derivable) ===
+  // === CALCULATION MODEL ===
   //
-  // INPUTS (from DB):
-  //   Balance       = cash in Kalshi account (fees already deducted when trades were placed)
-  //   Cost Basis    = Σ cost_dollars per open trade (entry_price × count / 100)
-  //   Fees Paid     = Σ fees_dollars per open trade
-  //   Current Price = live market price per ticker
-  //
-  // DERIVED:
-  //   Market Value    = Σ (current_price × count / 100)     ← what positions are worth NOW
-  //   Unrealized P&L  = Market Value − Cost Basis           ← position gains, BEFORE fees
-  //   Net P&L         = Unrealized P&L − Fees Paid          ← position gains, AFTER fees
-  //   Total Value     = Balance + Market Value               ← true account worth
-  //   Total Gain      = Total Value − $494.69                ← net gain (after fees)
-  //
-  // VERIFICATION (should hold when no closed trades):
-  //   Total Gain ≈ Net P&L
-  //   (small differences from Kalshi rounding are normal)
+  // Balance: from live Kalshi beacon (written by check.mjs every 30min to decisions table)
+  // Fallback: latest portfolio snapshot, then START value
+  // Market Value: Σ (current_price × count / 100) from live market data
+  // Total Value: Balance + Market Value (= true account worth)
+  // Total Gain: Total Value − $494.69
 
-  const balance=latest?.balance_dollars||START
+  const balance=beacon?.balance ?? latest?.balance_dollars ?? START
   const costBasis=openTrades.reduce((s,t)=>s+(t.cost_dollars||0),0)
   const totalFees=openTrades.reduce((s,t)=>s+(t.fees_dollars||0),0)
   const marketValue=withPnl.reduce((s,t)=>s+(t.cur*t.count/100),0)
@@ -125,7 +119,7 @@ export default function Page(){
       pts[pts.length-1]={...pts[pts.length-1],value:totalVal}
     }
     return pts
-  },[snaps,totalVal])
+  },[snaps,totalVal,beacon])
 
   const posData=withPnl.map(t=>({
     name:t.ticker.replace(/^KX/,'').replace(/-26APR30-/,' ').replace(/-26-/,' ').replace(/-27-/,' ').slice(0,20),
@@ -229,7 +223,7 @@ export default function Page(){
 
       {/* METRIC CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <Card label="Total Value" value={usd(totalVal)} sub={<><span className="font-mono">{usd(balance)}</span> cash + <span className="font-mono">{usd(marketValue)}</span> positions</>} accent={totalGain>=0?'green':'red'} />
+        <Card label="Total Value" value={usd(totalVal)} sub={<><span className="font-mono">{usd(balance)}</span> cash + <span className="font-mono">{usd(marketValue)}</span> positions{beacon?' ✓':' ⚠️ stale'}</>} accent={totalGain>=0?'green':'red'} />
         <Card label="Total Gain" value={`${totalGain>=0?'+':''}${usd(totalGain)}`} sub={<>{usd(totalVal)} − {usd(START)} start</>} accent={totalGain>=0?'green':'red'} />
         <Card label="Unrealized P&L" value={`${unrealizedPnl>=0?'+':''}${usd(unrealizedPnl)}`} sub={<>Mkt Value {usd(marketValue)} − Cost {usd(costBasis)}</>} accent={unrealizedPnl>=0?'green':'red'} />
         <Card label="Fees Paid" value={usd(totalFees)} sub={<>{openTrades.length} positions | {exposurePct.toFixed(1)}% exposure</>} />
