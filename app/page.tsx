@@ -13,7 +13,7 @@ const COLORS: Record<string,string> = {
 function fmt(n:number,d=2){return n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d})}
 function usd(n:number){return '$'+fmt(n)}
 
-interface Trade{trade_id:string;ticker:string;action:string;side:string;count:number;price_cents:number;cost_dollars:number;fees_dollars:number;status:string;thesis:string;edge_source:string;fair_value_cents:number;estimated_edge_cents:number;confidence:string;opened_at:string}
+interface Trade{trade_id:string;ticker:string;action:string;side:string;count:number;price_cents:number;cost_dollars:number;fees_dollars:number;status:string;thesis:string;edge_source:string;fair_value_cents:number;estimated_edge_cents:number;confidence:string;opened_at:string;exit_price_cents?:number;exit_date?:string;exit_reason?:string;pnl_dollars?:number;pnl_pct?:number}
 interface Snap{total_value_dollars:number;balance_dollars:number;portfolio_value_dollars:number;open_positions:number;total_exposure_dollars:number;exposure_pct:number;captured_at:string}
 interface MSnap{ticker:string;last_price:number;yes_bid:number;yes_ask:number;captured_at:string}
 interface Decision{id:number;ticker:string;decision:string;side:string;reasoning:string;edge_source:string;estimated_edge_cents:number;decided_at:string}
@@ -77,16 +77,33 @@ export default function Page(){
 
   const latest=snaps[snaps.length-1]
   const openTrades=trades.filter(t=>t.status==='open')
+  const closedTrades=trades.filter(t=>t.status==='closed')
 
-  // Compute P&L per position from live market data
+  // Compute P&L per position from live market data (open) or exit price (closed)
   const withPnl=useMemo(()=>openTrades.map(t=>{
     const s=msnaps[t.ticker]
     const cur=s?(t.side==='no'?(100-s.last_price):s.last_price):t.price_cents
     const pnl=(cur-t.price_cents)*t.count/100
     const pnlPct=(cur-t.price_cents)/t.price_cents*100
     const elapsed=Date.now()-new Date(t.opened_at).getTime();const days=Math.floor(elapsed/864e5);const hrs=Math.floor((elapsed%864e5)/36e5);const mins=Math.floor((elapsed%36e5)/6e4);const age=days>0?days+'d '+hrs+'h':hrs>0?hrs+'h '+mins+'m':mins+'m'
-    return{...t,cur,pnl,pnlPct,days,age}
+    return{...t,cur,pnl,pnlPct,days,age,isOpen:true}
   }),[openTrades,msnaps])
+
+  const closedWithPnl=useMemo(()=>closedTrades.map(t=>{
+    const cur=t.exit_price_cents||t.price_cents
+    const pnl=t.pnl_dollars||((cur-t.price_cents)*t.count/100)
+    const pnlPct=t.pnl_pct||((cur-t.price_cents)/t.price_cents*100)
+    const openDate=new Date(t.opened_at)
+    const closeDate=t.exit_date?new Date(t.exit_date):new Date()
+    const heldMs=closeDate.getTime()-openDate.getTime();const days=Math.floor(heldMs/864e5);const hrs=Math.floor((heldMs%864e5)/36e5)
+    const age=days>0?days+'d':hrs+'h'
+    return{...t,cur,pnl,pnlPct,days,age,isOpen:false}
+  }),[closedTrades])
+
+  const allPositions=useMemo(()=>[
+    ...withPnl.sort((a,b)=>b.pnl-a.pnl),
+    ...closedWithPnl.sort((a,b)=>b.pnl-a.pnl),
+  ],[withPnl,closedWithPnl])
 
   // === CALCULATION MODEL ===
   //
@@ -265,28 +282,34 @@ export default function Page(){
         </div>
       </div>
 
-      {/* POSITIONS TABLE — sorted by P&L descending (biggest movers on top) */}
+      {/* POSITIONS TABLE — open first (by P&L), then closed (by P&L) */}
       <div className="gradient-border rounded-xl mb-6 overflow-hidden">
         <div className="p-4 border-b border-[var(--border)]">
-          <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-[0.15em]">Open Positions <span className="text-[var(--muted2)] ml-2">sorted by P&L</span></h3>
+          <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-[0.15em]">All Positions <span className="text-[var(--muted2)] ml-2">{openTrades.length} open · {closedTrades.length} closed</span></h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-[var(--muted2)] text-[10px] uppercase tracking-wider">
+                <th className="p-2 text-left">Status</th>
                 <th className="p-2 text-left">Ticker</th>
                 <th className="p-2 text-left">Side</th>
                 <th className="p-2 text-right">Qty</th>
                 <th className="p-2 text-right">Entry</th>
-                <th className="p-2 text-right">Now</th>
+                <th className="p-2 text-right">{`Now / Exit`}</th>
                 <th className="p-2 text-right">P&L</th>
                 <th className="p-2 text-left">Edge</th>
                 <th className="p-2 text-left">Thesis</th>
               </tr>
             </thead>
             <tbody>
-              {[...withPnl].sort((a,b)=>b.pnl-a.pnl).map((t,i)=>(
-                <tr key={t.trade_id} className="border-b border-[var(--border)] hover:bg-[var(--surface2)] transition-colors animate-fade-up" style={{animationDelay:`${i*60}ms`}}>
+              {allPositions.map((t,i)=>(
+                <tr key={t.trade_id} className={`border-b border-[var(--border)] hover:bg-[var(--surface2)] transition-colors animate-fade-up ${!t.isOpen?'opacity-60':''}`} style={{animationDelay:`${i*60}ms`}}>
+                  <td className="p-2">
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${t.isOpen?'bg-[rgba(0,255,136,.1)] text-[var(--green)]':'bg-[rgba(255,255,255,.05)] text-[var(--muted)]'}`}>
+                      {t.isOpen?'OPEN':'CLOSED'}
+                    </span>
+                  </td>
                   <td className="p-2 font-mono font-semibold text-[var(--text)] text-xs whitespace-nowrap">
                     {t.ticker} <span className="text-[10px] text-[var(--muted2)] font-normal ml-1">{t.age}</span>
                   </td>
@@ -296,13 +319,13 @@ export default function Page(){
                   <td className="p-2 text-right font-mono text-xs">{t.cur}¢</td>
                   <td className={`p-3 text-right font-mono text-xs font-bold ${t.pnl>=0?'text-[var(--green)]':'text-[var(--red)]'}`}>
                     {t.pnl>=0?'+':''}{usd(t.pnl)}<br/>
-                    <span className="text-[var(--muted2)] font-normal">({t.pnlPct>=0?'+':''}{t.pnlPct.toFixed(1)}%)</span>
+                    <span className="text-[var(--muted2)] font-normal">({t.pnlPct>=0?'+':''}{Number(t.pnlPct).toFixed(1)}%)</span>
                   </td>
                   <td className="p-3"><span className="px-2 py-0.5 rounded-md text-[10px] whitespace-nowrap" style={{background:(COLORS[t.edge_source]||'#555')+'18',color:COLORS[t.edge_source]||'#555'}}>{t.edge_source?.replace(/_/g,' ')}</span></td>
-                  <td className="p-2 text-[var(--muted)] text-[11px] max-w-[300px]" title={t.thesis}><div className="line-clamp-2">{t.thesis}</div></td>
+                  <td className="p-2 text-[var(--muted)] text-[11px] max-w-[300px]" title={t.isOpen?t.thesis:(t.exit_reason||t.thesis)}><div className="line-clamp-2">{t.isOpen?t.thesis:(t.exit_reason||t.thesis)}</div></td>
                 </tr>
               ))}
-              {!withPnl.length&&<tr><td colSpan={8} className="p-8 text-center text-[var(--muted)]">Loading positions...</td></tr>}
+              {!allPositions.length&&<tr><td colSpan={9} className="p-8 text-center text-[var(--muted)]">Loading positions...</td></tr>}
             </tbody>
           </table>
         </div>
