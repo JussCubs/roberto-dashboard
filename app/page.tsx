@@ -315,7 +315,7 @@ export default function Page(){
                     </span>
                   </td>
                   <td className="p-2 font-mono font-semibold text-[var(--text)] text-xs whitespace-nowrap">
-                    {t.ticker} <span className="text-[10px] text-[var(--muted2)] font-normal ml-1">{t.age}</span>
+                    <a href={`https://kalshi.com/markets/${t.ticker.toLowerCase()}`} target="_blank" rel="noopener noreferrer" className="hover:text-[var(--accent)] hover:underline transition-colors">{t.ticker}</a> <span className="text-[10px] text-[var(--muted2)] font-normal ml-1">{t.age}</span>
                   </td>
                   <td className="p-3"><span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${t.side==='yes'?'bg-[rgba(0,255,136,.1)] text-[var(--green)]':'bg-[rgba(255,68,87,.1)] text-[var(--red)]'}`}>{t.side}</span></td>
                   <td className="p-2 text-right font-mono text-xs">{t.count}</td>
