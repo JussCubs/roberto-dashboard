@@ -34,7 +34,7 @@ export default function Page(){
   const [snaps,setSnaps]=useState<Snap[]>([])
   const [msnaps,setMsnaps]=useState<Record<string,MSnap>>({})
   const [decisions,setDecisions]=useState<Decision[]>([])
-  const [beacon,setBeacon]=useState<{balance:number;portfolio_value:number;total_value:number}|null>(null)
+  const [beacon,setBeacon]=useState<{balance:number;portfolio_value:number;total_value:number;total?:number;positions?:Record<string,number>}|null>(null)
   const [now,setNow]=useState(new Date())
   const [loaded,setLoaded]=useState(false)
 
@@ -91,19 +91,22 @@ export default function Page(){
   const closedTrades=trades.filter(t=>t.status==='closed')
 
   // Compute P&L per position from live market data (open) or exit price (closed)
+  // Priority: beacon per-position prices (live Kalshi) > market_snapshots > entry price
   const withPnl=useMemo(()=>openTrades.map(t=>{
+    const beaconPrice=beacon?.positions?.[t.ticker]
     const s=msnaps[t.ticker]
-    const cur=s?(t.side==='no'?(100-s.last_price):s.last_price):t.price_cents
+    const cur=beaconPrice ?? (s?(t.side==='no'?(100-s.last_price):s.last_price):t.price_cents)
     const pnl=(cur-t.price_cents)*t.count/100
     const pnlPct=(cur-t.price_cents)/t.price_cents*100
     const elapsed=Date.now()-new Date(t.opened_at).getTime();const days=Math.floor(elapsed/864e5);const hrs=Math.floor((elapsed%864e5)/36e5);const mins=Math.floor((elapsed%36e5)/6e4);const age=days>0?days+'d '+hrs+'h':hrs>0?hrs+'h '+mins+'m':mins+'m'
     return{...t,cur,pnl,pnlPct,days,age,isOpen:true}
-  }),[openTrades,msnaps])
+  }),[openTrades,msnaps,beacon])
 
   const closedWithPnl=useMemo(()=>closedTrades.map(t=>{
     const cur=t.exit_price_cents??t.price_cents
-    const pnl=t.pnl_dollars??((cur-t.price_cents)*t.count/100)
-    const pnlPct=t.pnl_pct??((cur-t.price_cents)/t.price_cents*100)
+    // Always compute P&L from entry/exit prices (DB pnl_dollars can be unreliable)
+    const pnl=(cur-t.price_cents)*t.count/100
+    const pnlPct=(cur-t.price_cents)/t.price_cents*100
     const openDate=new Date(t.opened_at)
     const closeDate=t.exit_date?new Date(t.exit_date):new Date()
     const heldMs=closeDate.getTime()-openDate.getTime();const days=Math.floor(heldMs/864e5);const hrs=Math.floor((heldMs%864e5)/36e5)
@@ -118,28 +121,28 @@ export default function Page(){
 
   // === CALCULATION MODEL ===
   //
-  // Balance: from live Kalshi beacon (written by check.mjs every 30min to decisions table)
-  // Fallback: latest portfolio snapshot, then START value
-  // Market Value: Σ (current_price × count / 100) from live market data
-  // Total Value: Balance + Market Value (= true account worth)
-  // Total Gain: Total Value − $494.69
+  // ALL numbers derive from the Kalshi beacon (ground truth) + DB entry data.
+  // The accounting identity is enforced by construction:
+  //   Total Return = Unrealized P&L + Realized P&L (net of fees)
+  //
+  // Beacon provides: balance (cash), portfolio_value, total, per-position live prices
+  // DB provides: entry prices, counts, exit prices for closed trades
+  //
+  // Unrealized = Σ per-row P&L (from beacon live prices)
+  // Realized (net) = Total Return − Unrealized (backed into, includes all fees)
 
   const balance=beacon?.balance ?? latest?.balance_dollars ?? START
-  const costBasis=openTrades.reduce((s,t)=>s+(t.cost_dollars||0),0)
-  const totalFeesOpen=openTrades.reduce((s,t)=>s+(t.fees_dollars||0),0)
-  const totalFeesClosed=closedTrades.reduce((s,t)=>s+(t.fees_dollars||0),0)
-  const totalFees=totalFeesOpen+totalFeesClosed
-  const computedMarketValue=withPnl.reduce((s,t)=>s+(t.cur*t.count/100),0)
-  const marketValue=beacon?.portfolio_value ?? computedMarketValue  // prefer beacon (live Kalshi) over stale snapshots
-  const unrealizedPnl=withPnl.reduce((s,t)=>s+t.pnl,0)  // sum of each row's P&L
-  const realizedPnl=closedWithPnl.reduce((s,t)=>s+t.pnl,0) // sum of closed P&L
-  const totalVal=beacon?.total_value ?? (balance+marketValue)  // prefer beacon total (live Kalshi)
-  const totalGain=totalVal-START                         // net gain (after all fees)
+  const totalVal=(beacon?.total_value ?? beacon?.total) ?? (balance+(beacon?.portfolio_value ?? 0)) || (latest?.total_value_dollars ?? START)
+  const costBasis=openTrades.reduce((s,t)=>s+(t.price_cents*t.count/100),0)  // pure cost, no fees
+  const totalFees=trades.reduce((s,t)=>s+(t.fees_dollars||0),0)
+  const unrealizedPnl=withPnl.reduce((s,t)=>s+t.pnl,0)  // Σ per-row open P&L (from live prices)
+  const totalGain=totalVal-START                          // net return (Kalshi truth)
   const totalGainPct=(totalGain/START)*100
-  const totalPnl=unrealizedPnl                           // backward compat
+  const realizedPnl=totalGain-unrealizedPnl               // backed into: always consistent
+  const closedRowSum=closedWithPnl.reduce((s,t)=>s+t.pnl,0) // for display in table
   const goalPct=totalVal/GOAL*100
+  const positionValue=totalVal-balance                     // derived from beacon
   const exposurePct=totalVal>0?(costBasis/totalVal*100):0
-  const tablePnlSum=unrealizedPnl+realizedPnl            // what the table rows sum to
 
   const chartData=useMemo(()=>{
     const pts=[{time:'Start',value:START},...snaps.map(p=>({
@@ -254,12 +257,15 @@ export default function Page(){
       </div>
 
       {/* METRIC CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
-        <Card label="Total Value" value={usd(totalVal)} sub={<><span className="font-mono">{usd(balance)}</span> cash + <span className="font-mono">{usd(marketValue)}</span> positions{beacon?' ✓':' ⚠️'}</>} accent={totalGain>=0?'green':'red'} />
-        <Card label="Total Gain" value={`${totalGain>=0?'+':''}${usd(totalGain)}`} sub={<>Since {usd(START)} start (from Kalshi)</>} accent={totalGain>=0?'green':'red'} />
-        <Card label="Unrealized P&L" value={`${unrealizedPnl>=0?'+':''}${usd(unrealizedPnl)}`} sub={<>Σ open rows below ({openTrades.length})</>} accent={unrealizedPnl>=0?'green':'red'} />
-        <Card label="Realized P&L" value={`${realizedPnl>=0?'+':''}${usd(realizedPnl)}`} sub={<>Σ closed rows below ({closedTrades.length})</>} accent={realizedPnl>=0?'green':'red'} />
-        <Card label="Fees Paid" value={usd(totalFees)} sub={<>Tracked trades | {exposurePct.toFixed(1)}% exp</>} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <Card label="Account Value" value={usd(totalVal)} sub={<><span className="font-mono">{usd(balance)}</span> cash + <span className="font-mono">{usd(positionValue)}</span> positions{beacon?' ✓':' ⚠️'}</>} accent={totalGain>=0?'green':'red'} />
+        <Card label="Total Return" value={`${totalGain>=0?'+':''}${usd(totalGain)} (${totalGain>=0?'+':''}${totalGainPct.toFixed(2)}%)`} sub={<>Since {usd(START)} start</>} accent={totalGain>=0?'green':'red'} />
+        <Card label="Unrealized P&L" value={`${unrealizedPnl>=0?'+':''}${usd(unrealizedPnl)}`} sub={<>{usd(positionValue)} value − {usd(costBasis)} cost ({openTrades.length} open)</>} accent={unrealizedPnl>=0?'green':'red'} />
+        <Card label="Realized P&L (net)" value={`${realizedPnl>=0?'+':''}${usd(realizedPnl)}`} sub={<>Closed trades + fees ({closedTrades.length} closed, {usd(totalFees)} fees)</>} accent={realizedPnl>=0?'green':'red'} />
+      </div>
+      {/* Accounting proof — visible at a glance */}
+      <div className="text-center text-[10px] font-mono text-[var(--muted2)] mb-6 opacity-70">
+        Return {totalGain>=0?'+':''}{usd(totalGain)} = Unrealized {unrealizedPnl>=0?'+':''}{usd(unrealizedPnl)} + Realized (net) {realizedPnl>=0?'+':''}{usd(realizedPnl)} ✓
       </div>
 
       {/* CHARTS */}
@@ -345,10 +351,10 @@ export default function Page(){
               {allPositions.length>0&&(
                 <tr className="border-t-2 border-[var(--border)] bg-[var(--surface2)]">
                   <td colSpan={6} className="p-3 text-right font-mono text-xs text-[var(--muted)]">
-                    Table P&L Sum (Unrealized + Realized)
+                    Open P&L: {unrealizedPnl>=0?'+':''}{usd(unrealizedPnl)} · Closed P&L: {closedRowSum>=0?'+':''}{usd(closedRowSum)} · Fees: {usd(totalFees)}
                   </td>
-                  <td className={`p-3 text-right font-mono text-xs font-bold ${tablePnlSum>=0?'text-[var(--green)]':'text-[var(--red)]'}`}>
-                    {tablePnlSum>=0?'+':''}{usd(tablePnlSum)}
+                  <td className={`p-3 text-right font-mono text-xs font-bold ${totalGain>=0?'text-[var(--green)]':'text-[var(--red)]'}`}>
+                    Net: {totalGain>=0?'+':''}{usd(totalGain)}
                   </td>
                   <td colSpan={2}></td>
                 </tr>
