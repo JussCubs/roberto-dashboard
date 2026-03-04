@@ -133,7 +133,8 @@ export default function Page(){
 
   const balance=beacon?.balance ?? latest?.balance_dollars ?? START
   const beaconTotal=beacon?.total_value ?? beacon?.total ?? null
-  const totalVal=beaconTotal ?? (balance+(beacon?.portfolio_value ?? 0)) || (latest?.total_value_dollars ?? START)
+  const fallbackTotal=latest?.total_value_dollars ?? START
+  const totalVal=beaconTotal ?? (balance+(beacon?.portfolio_value ?? 0) > START ? balance+(beacon?.portfolio_value ?? 0) : fallbackTotal)
   const costBasis=openTrades.reduce((s,t)=>s+(t.price_cents*t.count/100),0)  // pure cost, no fees
   const totalFees=trades.reduce((s,t)=>s+(t.fees_dollars||0),0)
   const unrealizedPnl=withPnl.reduce((s,t)=>s+t.pnl,0)  // Σ per-row open P&L (from live prices)
