@@ -129,10 +129,11 @@ export default function Page(){
   const totalFeesOpen=openTrades.reduce((s,t)=>s+(t.fees_dollars||0),0)
   const totalFeesClosed=closedTrades.reduce((s,t)=>s+(t.fees_dollars||0),0)
   const totalFees=totalFeesOpen+totalFeesClosed
-  const marketValue=withPnl.reduce((s,t)=>s+(t.cur*t.count/100),0)
+  const computedMarketValue=withPnl.reduce((s,t)=>s+(t.cur*t.count/100),0)
+  const marketValue=beacon?.portfolio_value ?? computedMarketValue  // prefer beacon (live Kalshi) over stale snapshots
   const unrealizedPnl=withPnl.reduce((s,t)=>s+t.pnl,0)  // sum of each row's P&L
   const realizedPnl=closedWithPnl.reduce((s,t)=>s+t.pnl,0) // sum of closed P&L
-  const totalVal=balance+marketValue                     // true account value
+  const totalVal=beacon?.total_value ?? (balance+marketValue)  // prefer beacon total (live Kalshi)
   const totalGain=totalVal-START                         // net gain (after all fees)
   const totalGainPct=(totalGain/START)*100
   const totalPnl=unrealizedPnl                           // backward compat
