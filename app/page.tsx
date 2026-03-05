@@ -17,6 +17,7 @@ interface Trade{trade_id:string;ticker:string;action:string;side:string;count:nu
 interface Snap{total_value_dollars:number;balance_dollars:number;portfolio_value_dollars:number;open_positions:number;total_exposure_dollars:number;exposure_pct:number;captured_at:string}
 interface MSnap{ticker:string;last_price:number;yes_bid:number;yes_ask:number;captured_at:string}
 interface Decision{id:number;ticker:string;decision:string;side:string;reasoning:string;edge_source:string;estimated_edge_cents:number;decided_at:string}
+interface ActivityLog{id:number;ts:string;source:string;event:string;detail:string|null;status:string;duration_ms:number|null;metadata:Record<string,unknown>|null}
 
 
 const kalshiUrls: Record<string, string> = {
@@ -34,21 +35,24 @@ export default function Page(){
   const [snaps,setSnaps]=useState<Snap[]>([])
   const [msnaps,setMsnaps]=useState<Record<string,MSnap>>({})
   const [decisions,setDecisions]=useState<Decision[]>([])
+  const [activityLog,setActivityLog]=useState<ActivityLog[]>([])
   const [beacon,setBeacon]=useState<{balance:number;portfolio_value:number;total_value:number;total?:number;positions?:Record<string,number>}|null>(null)
   const [now,setNow]=useState(new Date())
   const [loaded,setLoaded]=useState(false)
 
   const fetch_=useCallback(async()=>{
     // Step 1: fetch trades first so we know which tickers to get snapshots for
-    const [t,p,d,bq]=await Promise.all([
+    const [t,p,d,bq,al]=await Promise.all([
       supabase.from('trades').select('*').order('opened_at',{ascending:true}),
       supabase.from('portfolio_snapshots').select('*').order('captured_at',{ascending:true}),
       supabase.from('decisions').select('*').order('decided_at',{ascending:false}).limit(200),
       supabase.from('decisions').select('*').eq('ticker','__BALANCE__').order('decided_at',{ascending:false}).limit(1),
+      supabase.from('activity_log').select('*').order('ts',{ascending:false}).limit(100),
     ])
     if(t.data)setTrades(t.data)
     if(p.data)setSnaps(p.data)
     if(d.data)setDecisions(d.data.filter((x:Decision)=>x.ticker!=='__BALANCE__'))
+    if(al.data)setActivityLog(al.data)
     // Balance beacon — direct query for reliability
     if(bq.data&&bq.data.length>0){try{setBeacon(JSON.parse(bq.data[0].reasoning))}catch{}}
 
@@ -79,6 +83,7 @@ export default function Page(){
       .on('postgres_changes',{event:'*',schema:'public',table:'decisions'},()=>fetch_())
       .on('postgres_changes',{event:'INSERT',schema:'public',table:'decisions',filter:'ticker=eq.__BALANCE__'},()=>fetch_())
       .on('postgres_changes',{event:'*',schema:'public',table:'market_snapshots'},()=>fetch_())
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'activity_log'},()=>fetch_())
       .subscribe()
     // Fallback poll every 60s in case realtime hiccups
     const i=setInterval(fetch_,60000)
@@ -367,6 +372,48 @@ export default function Page(){
       </div>
 
       {/* DECISION TERMINAL */}
+      {/* ACTIVITY LOG */}
+      <div className="gradient-border rounded-xl mb-6 overflow-hidden">
+        <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
+          <h3 className="text-xs font-semibold text-[var(--muted)] uppercase tracking-[0.15em]">System Activity Log</h3>
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--green)] pulse-glow"></span>
+            <span className="text-[10px] text-[var(--muted2)] font-mono">LIVE · {activityLog.length} events</span>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px] font-mono">
+            <thead>
+              <tr className="border-b border-[var(--border)] text-[var(--muted2)] text-[10px] uppercase tracking-wider">
+                <th className="p-2 text-left w-36">Time</th>
+                <th className="p-2 text-left w-28">Source</th>
+                <th className="p-2 text-left w-36">Event</th>
+                <th className="p-2 text-left">Detail</th>
+                <th className="p-2 text-center w-16">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activityLog.length===0&&(
+                <tr><td colSpan={5} className="p-4 text-center text-[var(--muted2)]">No activity yet — waiting for first cron run...</td></tr>
+              )}
+              {activityLog.map((e)=>{
+                const statusColor=e.status==='ok'?'var(--green)':e.status==='warn'||e.status==='alert'?'var(--amber)':'var(--red)'
+                const sourceColor:Record<string,string>={'heartbeat':'#4488ff','market-scanner':'#aa66ff','news-intel':'#00ccff','data-etl':'#ffaa00','daily-audit':'#ff6688','backup':'#888','trade-executor':'#00ff88','webhook':'#ff8844','system':'#666'}
+                return(
+                  <tr key={e.id} className="border-b border-[var(--border)] hover:bg-[var(--surface2)] transition-colors">
+                    <td className="p-2 text-[var(--muted2)] whitespace-nowrap">{new Date(e.ts).toLocaleString('en-US',{timeZone:TZ,month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}</td>
+                    <td className="p-2 font-bold whitespace-nowrap" style={{color:sourceColor[e.source]||'#888'}}>{e.source}</td>
+                    <td className="p-2 text-[var(--muted)] whitespace-nowrap">{e.event}</td>
+                    <td className="p-2 text-[var(--fg)] max-w-xs truncate" title={e.detail||''}>{e.detail||'—'}</td>
+                    <td className="p-2 text-center font-bold" style={{color:statusColor}}>{e.status.toUpperCase()}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div className="rounded-xl border border-[#21262d] mb-6 overflow-hidden">
         <div className="px-4 py-3 bg-[#0d1117] border-b border-[#21262d] flex items-center gap-3">
           <div className="flex gap-1.5">
